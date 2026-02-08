@@ -1,4 +1,5 @@
 # EMG Hand Movement Detector - Python Dependencies
+# Repository: https://github.com/hrishi63/HAND_MOVEMENT_DETECTOR_USING_EMG_WITH_TRANSFORMER_MODEL
 
 # Core ML/DL
 torch==2.1.0
@@ -15,9 +16,9 @@ scikit-learn==1.3.2
 Flask==3.0.0
 Flask-CORS==4.0.0
 
-# Serial Communication (for Arduino)
+# Serial Communication (Arduino)
 pyserial==3.5
 
-# Optional: For development
+# Optional: Development & Visualization
 jupyter==1.0.0
 matplotlib==3.8.2
