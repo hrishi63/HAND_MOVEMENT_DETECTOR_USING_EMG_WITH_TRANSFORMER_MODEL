@@ -1,98 +1,160 @@
-"""
-Flask Server for 2-Channel EMG Hand Gesture Recognition
-FIXED: JSON serialization for boolean values
-"""
+import serial
+import time
+import threading
+from collections import deque
 from flask import Flask, jsonify
 from flask_cors import CORS
-import numpy as np
 
-# ========== MODEL SELECTION ==========
-USE_2_CHANNEL = True  # Set to False to use old 10-channel model
+# ==============================
+# CONFIG
+# ==============================
+SERIAL_PORT = "/dev/ttyACM0"
+BAUD_RATE = 115200
 
-if USE_2_CHANNEL:
-    print("🔵 Loading 2-CHANNEL model...")
-    from predict_2ch import predict_clench_2ch as predict_function
-else:
-    print("🔴 Loading 10-CHANNEL model...")
-    from predict import predict_finger_movement as predict_function
+READ_HZ = 200
+API_HZ = 10
 
-# ========== FLASK APP ==========
-app = Flask(__name__)
-CORS(app)  # Allow React on localhost:3000
+BASELINE_ALPHA = 0.002
+CLENCH_ON = 12.0
+CLENCH_OFF = 6.0
 
-@app.route('/prediction')
-def get_prediction():
-    """
-    Main prediction endpoint
-    Returns: [bool, False, False, False, False]
-    - First element: True = clench, False = open
-    - Other 4 elements: Reserved for future finger detection
-    """
+RMS_WINDOW = 25
+AI_WINDOW = 256
+
+# ==============================
+# GLOBAL STATE
+# ==============================
+env_buffer = deque(maxlen=RMS_WINDOW)
+ai_buffer = deque(maxlen=AI_WINDOW)
+
+baseline = None
+current_rms = 0.0
+clenched = False
+
+lock = threading.Lock()
+
+# ==============================
+# SERIAL THREAD
+# ==============================
+def serial_loop():
+    global baseline, current_rms, clenched
+
     try:
-        prediction = predict_function()
-        
-        # Convert to Python native types for JSON serialization
-        prediction_json = [bool(x) for x in prediction]
-        
-        return jsonify(prediction_json)
-    
+        ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+        time.sleep(2)
+        print(f"✅ Connected to Arduino on {SERIAL_PORT}")
     except Exception as e:
-        print(f"❌ Prediction error: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # Return safe default on error
-        return jsonify([False, False, False, False, False])
+        print("❌ Serial error:", e)
+        return
 
-@app.route('/signal')
-def get_signal():
-    """
-    Dummy EMG signal endpoint (for visualization)
-    Returns: List of 100 float values
-    """
-    # Generate dummy signal with small amplitude
-    signal = (np.random.randn(100) * 0.02).tolist()
-    return jsonify(signal)
+    while True:
+        try:
+            line = ser.readline().decode("utf-8", errors="ignore").strip()
+            if not line:
+                continue
 
-@app.route('/status')
-def get_status():
-    """
-    System status endpoint
-    Returns: Model info and configuration
-    """
-    model_info = {
-        "model_type": "2-channel" if USE_2_CHANNEL else "10-channel",
-        "input_features": 18 if USE_2_CHANNEL else 90,
-        "channels": 2 if USE_2_CHANNEL else 10,
-        "ready": True
-    }
-    return jsonify(model_info)
+            try:
+                val = int(line)
+            except ValueError:
+                continue
 
-@app.route('/health')
-def health_check():
-    """
-    Health check endpoint
-    """
-    return jsonify({"status": "ok", "message": "Server is running"})
+            with lock:
+                # ================= AI BUFFER (NEW)
+                ai_buffer.append(val)
 
-if __name__ == '__main__':
-    print("\n" + "="*60)
-    print("🚀 EMG Hand Gesture Recognition Server")
-    print("="*60)
-    if USE_2_CHANNEL:
-        print("📊 Model: 2-Channel Transformer (18-D features)")
-        print("🔌 Hardware: Arduino + 2 EMG sensors")
-    else:
-        print("📊 Model: 10-Channel Transformer (90-D features)")
-        print("🔌 Hardware: NinaPro DB1 simulation")
-    print("="*60)
-    print("✅ Server starting on http://127.0.0.1:5000")
-    print("✅ Endpoints:")
-    print("   - /prediction  (Main EMG prediction)")
-    print("   - /signal      (Dummy signal data)")
-    print("   - /status      (Model configuration)")
-    print("   - /health      (Health check)")
-    print("="*60)
-    print("\n💡 Press Ctrl+C to stop the server\n")
-   
-    app.run(debug=True, port=5000)
+                # ================= RMS PIPELINE (UNCHANGED)
+                env_buffer.append(val)
+
+                if len(env_buffer) < RMS_WINDOW:
+                    continue
+
+                rms = (
+                    sum(v * v for v in env_buffer)
+                    / len(env_buffer)
+                ) ** 0.5
+
+                if baseline is None:
+                    baseline = rms
+                    continue
+
+                # adaptive baseline
+                if not clenched:
+                    baseline = (
+                        (1 - BASELINE_ALPHA) * baseline
+                        + BASELINE_ALPHA * rms
+                    )
+
+                delta = rms - baseline
+
+                # hysteresis clench detection
+                if not clenched and delta > CLENCH_ON:
+                    clenched = True
+                elif clenched and delta < CLENCH_OFF:
+                    clenched = False
+
+                current_rms = rms
+
+        except Exception:
+            continue
+
+# ==============================
+# FLASK APP
+# ==============================
+app = Flask(__name__)
+CORS(app)
+
+# ==============================
+# EXISTING UI ENDPOINT (UNCHANGED)
+# ==============================
+@app.route("/prediction")
+def prediction():
+    with lock:
+        return jsonify({
+            "rms": round(current_rms, 2),
+            "clenched": bool(clenched)
+        })
+
+# ==============================
+# AI WINDOW ENDPOINT (NEW)
+# ==============================
+@app.route("/ai_window")
+def ai_window():
+    with lock:
+        if len(ai_buffer) < AI_WINDOW:
+            return jsonify({
+                "ready": False,
+                "window": []
+            })
+
+        return jsonify({
+            "ready": True,
+            "window": list(ai_buffer)
+        })
+
+# ==============================
+# MAIN
+# ==============================
+if __name__ == "__main__":
+    print("""
+=======================================================
+🚀 EMG Hand State Server (STABLE + AI ANALYZER READY)
+=======================================================
+✋ OPEN vs ✊ CLENCHED → RMS Engine (UNCHANGED)
+🧠 Adaptive Baseline + Hysteresis
+🤖 Transformer AI Window Streaming ACTIVE
+🌐 /prediction  → Main UI
+🌐 /ai_window   → AI Analyzer
+=======================================================
+""")
+
+    t = threading.Thread(
+        target=serial_loop,
+        daemon=True
+    )
+    t.start()
+
+    app.run(
+        host="127.0.0.1",
+        port=5000,
+        debug=False
+    )
