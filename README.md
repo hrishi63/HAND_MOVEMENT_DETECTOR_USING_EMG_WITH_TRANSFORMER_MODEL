@@ -63,7 +63,7 @@ Output (Gesture probability 0-1)
 
 The model was trained for 50 epochs with early stopping (patience=15) on the [Kaggle EMG dataset](https://www.kaggle.com/datasets/nveshaan/openclose-fist-state-emg-signal-envelope).
 
-![Training Progress](assets/training_plot.png)
+![Training Progress](training_plot.png)
 
 **Training Configuration:**
 - **Dataset**: 13 subjects, 13,000 samples
