@@ -1,4 +1,4 @@
-# EMG Hand Movement Detector with Transformer Model
+# EMG Hand Movement Analyzer with Transformer Model
 
 Real-time hand gesture detection system using electromyography (EMG) signals, powered by a hybrid CNN-Transformer deep learning model with **clinical patient data management**.
 
