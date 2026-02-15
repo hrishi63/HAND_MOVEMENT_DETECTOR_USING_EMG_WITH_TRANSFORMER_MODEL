@@ -36,3 +36,213 @@
     transform: rotate(360deg);
   }
 }
+
+/* ================= NEW ANIMATIONS ================= */
+
+/* Pulse animation for recording status */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Blink animation for recording dot */
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Scale animation for hand emoji */
+@keyframes scale {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.05);
+  }
+}
+
+/* ================= BUTTON INTERACTIONS ================= */
+
+button {
+  transition: all 0.3s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  filter: grayscale(0.5);
+}
+
+button:disabled:hover {
+  transform: none !important;
+  filter: grayscale(0.5) !important;
+}
+
+/* ================= INPUT INTERACTIONS ================= */
+
+input[type="text"]:focus,
+input[type="number"]:focus {
+  border-color: #00e676 !important;
+  box-shadow: 0 0 10px rgba(0, 230, 118, 0.3);
+}
+
+input[type="radio"]:focus {
+  outline: 2px solid #00e676;
+  outline-offset: 2px;
+}
+
+/* ================= SMOOTH SCROLLING ================= */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ================= CUSTOM SCROLLBAR ================= */
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* ================= SELECTION COLOR ================= */
+
+::selection {
+  background: #00e676;
+  color: #000;
+}
+
+::-moz-selection {
+  background: #00e676;
+  color: #000;
+}
+
+/* ================= MODAL ANIMATIONS ================= */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Apply animations to modal if you add classes */
+.modal-overlay {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.modal-content {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* ================= RESPONSIVE DESIGN ================= */
+
+@media (max-width: 768px) {
+  /* Make buttons stack on mobile */
+  button {
+    width: 100%;
+    margin: 0.5rem 0;
+  }
+}
+
+/* ================= ACCESSIBILITY ================= */
+
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid #00e676;
+  outline-offset: 2px;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ================= UTILITY CLASSES ================= */
+
+.text-green {
+  color: #00e676;
+}
+
+.text-orange {
+  color: #ffa726;
+}
+
+.text-red {
+  color: #ff1744;
+}
+
+.bg-dark {
+  background-color: #0a0a0a;
+}
+
+.border-green {
+  border: 1px solid #00e676;
+}
+
+/* ================= LOADING SPINNER (Optional) ================= */
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  border: 3px solid #333;
+  border-top: 3px solid #00e676;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
