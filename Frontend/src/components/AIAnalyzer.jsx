@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 
 const WINDOW_SIZE = 256;
 
-export default function AIAnalyzer({ handState, running }) {
+export default function AIAnalyzer({ handState, running, recording, patientInfo }) {
   const [cycles, setCycles] = useState(0);
   const [healthStatus, setHealthStatus] = useState("Monitoring...");
   const [activation, setActivation] = useState(0);
@@ -12,6 +12,7 @@ export default function AIAnalyzer({ handState, running }) {
   const [responsiveness, setResponsiveness] = useState(0);
   const [gestureConfidence, setGestureConfidence] = useState(0);
   const [debugInfo, setDebugInfo] = useState("Loading...");
+  const [recordedData, setRecordedData] = useState([]);
   
   const sessionRef = useRef(null);
   const lastStateRef = useRef("open");
@@ -82,12 +83,100 @@ export default function AIAnalyzer({ handState, running }) {
     lastStateRef.current = handState;
   }, [handState]);
 
+  /* ================= EXPORT TO CSV ================= */
+  const exportToCSV = useCallback(() => {
+    if (!patientInfo || recordedData.length === 0) {
+      alert("No data to export! Start recording first.");
+      return;
+    }
+
+    // Prepare CSV header
+    const header = [
+      "Patient Name",
+      "Age",
+      "Gender",
+      "Session Start",
+      "Timestamp",
+      "AI Confidence (%)",
+      "Activation (%)",
+      "Stability (%)",
+      "Sharpness (%)",
+      "Consistency (%)",
+      "Responsiveness (%)",
+      "Hand State",
+      "Gesture Cycles",
+      "Health Status"
+    ];
+    
+    // Prepare CSV rows
+    const rows = recordedData.map(row => [
+      patientInfo.name,
+      patientInfo.age,
+      patientInfo.gender,
+      new Date(patientInfo.timestamp).toLocaleString(),
+      new Date(row.timestamp).toLocaleString(),
+      row.gestureConfidence,
+      row.activation,
+      row.stability,
+      row.sharpness,
+      row.consistency,
+      row.responsiveness,
+      row.handState,
+      row.cycles,
+      row.healthStatus
+    ]);
+    
+    // Combine header and rows
+    const csvContent = [
+      header.join(","),
+      ...rows.map(row => row.join(","))
+    ].join("\n");
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    
+    const filename = `EMG_${patientInfo.name.replace(/\s+/g, "_")}_${new Date().toISOString().split('T')[0]}_${new Date().toISOString().split('T')[1].split('.')[0].replace(/:/g, '-')}.csv`;
+    link.download = filename;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    alert(`✅ Data exported successfully!\n\nFile: ${filename}\nRecords: ${recordedData.length}\n\nPatient: ${patientInfo.name}\nAge: ${patientInfo.age}\nGender: ${patientInfo.gender}`);
+  }, [patientInfo, recordedData]);
+
+  /* ================= EXPORT HANDLER ================= */
+  useEffect(() => {
+    const handleExport = () => {
+      exportToCSV();
+    };
+    
+    window.addEventListener("exportData", handleExport);
+    return () => window.removeEventListener("exportData", handleExport);
+  }, [exportToCSV]);
+
+  /* ================= RESET RECORDING ================= */
+  useEffect(() => {
+    // Clear recorded data when patient info changes (reset button clicked)
+    if (!patientInfo) {
+      setRecordedData([]);
+      setCycles(0);
+      setHealthStatus("Monitoring...");
+    }
+  }, [patientInfo]);
+
   /* ================= AI INFERENCE ENGINE ================= */
   useEffect(() => {
-    if (!modelLoadedRef.current || !running) {
-      if (!running && modelLoadedRef.current) {
-        setDebugInfo("⏸ Paused");
-      }
+    if (!modelLoadedRef.current || !sessionRef.current) {
+      return;
+    }
+    
+    if (!running) {
+      setDebugInfo("⏸ Paused");
       return;
     }
 
@@ -159,18 +248,46 @@ export default function AIAnalyzer({ handState, running }) {
         const resp = Math.min(100, meanDiff * 20);
 
         /* ===== Update UI ===== */
-        setGestureConfidence((avgConfidence * 100).toFixed(1));
-        setActivation(act.toFixed(1));
-        setStability(stab.toFixed(1));
-        setSharpness(sharp.toFixed(1));
-        setConsistency(cons.toFixed(1));
-        setResponsiveness(resp.toFixed(1));
+        const newGestureConfidence = (avgConfidence * 100).toFixed(1);
+        const newActivation = act.toFixed(1);
+        const newStability = stab.toFixed(1);
+        const newSharpness = sharp.toFixed(1);
+        const newConsistency = cons.toFixed(1);
+        const newResponsiveness = resp.toFixed(1);
+
+        setGestureConfidence(newGestureConfidence);
+        setActivation(newActivation);
+        setStability(newStability);
+        setSharpness(newSharpness);
+        setConsistency(newConsistency);
+        setResponsiveness(newResponsiveness);
 
         /* ===== Health Status ===== */
+        let newHealthStatus = healthStatus;
         if (cycles >= 3 && avgConfidence > 0.7) {
-          setHealthStatus("Excellent Muscle Control");
+          newHealthStatus = "Excellent Muscle Control";
+          setHealthStatus(newHealthStatus);
         } else if (cycles >= 3) {
-          setHealthStatus("Good Muscle Response");
+          newHealthStatus = "Good Muscle Response";
+          setHealthStatus(newHealthStatus);
+        }
+
+        /* ===== RECORD DATA ===== */
+        if (recording && patientInfo) {
+          const dataPoint = {
+            timestamp: new Date().toISOString(),
+            gestureConfidence: newGestureConfidence,
+            activation: newActivation,
+            stability: newStability,
+            sharpness: newSharpness,
+            consistency: newConsistency,
+            responsiveness: newResponsiveness,
+            handState: handState,
+            cycles: cycles,
+            healthStatus: newHealthStatus
+          };
+          
+          setRecordedData(prev => [...prev, dataPoint]);
         }
 
       } catch (e) {
@@ -181,7 +298,7 @@ export default function AIAnalyzer({ handState, running }) {
 
     const id = setInterval(runAI, 400);
     return () => clearInterval(id);
-  }, [running, handState, cycles]);
+  }, [running, handState, cycles, recording, patientInfo, healthStatus]);
 
   /* ================= UI ================= */
   return (
@@ -190,6 +307,11 @@ export default function AIAnalyzer({ handState, running }) {
       
       <div style={styles.debug}>
         <p>{debugInfo}</p>
+        {recording && (
+          <p style={styles.recordingStatus}>
+            🔴 Recording: {recordedData.length} data points
+          </p>
+        )}
       </div>
       
       <div style={styles.grid}>
@@ -204,6 +326,9 @@ export default function AIAnalyzer({ handState, running }) {
       <div style={styles.status}>
         <p><strong>Gesture Cycles:</strong> {cycles}</p>
         <p><strong>Health:</strong> <span style={{color: '#00e676'}}>{healthStatus}</span></p>
+        {recording && (
+          <p><strong>Recording:</strong> <span style={{color: '#ff1744'}}>{recordedData.length} samples</span></p>
+        )}
       </div>
     </div>
   );
@@ -255,6 +380,12 @@ const styles = {
     color: "#ffa500",
     fontFamily: "monospace",
     fontSize: "0.9rem",
+  },
+  recordingStatus: {
+    marginTop: "0.5rem",
+    color: "#ff1744",
+    fontWeight: "bold",
+    animation: "pulse 1.5s infinite",
   },
   grid: {
     display: "grid",
